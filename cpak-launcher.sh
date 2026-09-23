@@ -6,7 +6,7 @@ export CSPENGUIN_CPAK=1
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/cspenguin-cpak"
 WINE_VERSION=11.4
 WINE_URL="https://github.com/Kron4ek/Wine-Builds/releases/download/${WINE_VERSION}/wine-${WINE_VERSION}-amd64.tar.xz"
-WINE_SHA256=b98761339edb5cf9a3f622fa08de2d4b453ab96e2b5d8a612aa3687ea6ec523
+WINE_SHA256=b98761339edb5cf9a3f622fa08de2d4b453ab96e2b5d8a612aa3687ea6ec523f
 WINE_ARCHIVE="$DATA_DIR/wine-${WINE_VERSION}-amd64.tar.xz"
 WINE_DIR="$DATA_DIR/wine-${WINE_VERSION}"
 # Baked Wine runtime shipped inside the cpak image (preferred at runtime).

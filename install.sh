@@ -112,7 +112,7 @@ WINEARCH=win64
 
 WINE_VERSION="11.4"
 WINE_URL="https://github.com/Kron4ek/Wine-Builds/releases/download/${WINE_VERSION}/wine-${WINE_VERSION}-amd64.tar.xz"
-WINE_SHA256="b98761339edb5cf9a3f622fa08de2d4b453ab96e2b5d8a612aa3687ea6ec523"
+WINE_SHA256="b98761339edb5cf9a3f622fa08de2d4b453ab96e2b5d8a612aa3687ea6ec523f"
 FREETYPE_VERSION="2.13.2"
 FREETYPE_URL="https://archive.archlinux.org/packages/f/freetype2/freetype2-${FREETYPE_VERSION}-1-x86_64.pkg.tar.zst"
 FREETYPE32_URL="https://archive.archlinux.org/packages/l/lib32-freetype2/lib32-freetype2-${FREETYPE_VERSION}-1-x86_64.pkg.tar.zst"

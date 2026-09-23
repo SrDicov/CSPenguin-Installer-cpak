@@ -28,7 +28,7 @@ RUN dpkg --add-architecture i386 \
 # Baked Wine runtime (Kron4ek build, checksum-verified).
 # First-launch then reuses this instead of downloading Wine to the user home.
 ARG WINE_VERSION=11.4
-ARG WINE_SHA256=b98761339edb5cf9a3f622fa08de2d4b453ab96e2b5d8a612aa3687ea6ec523
+ARG WINE_SHA256=b98761339edb5cf9a3f622fa08de2d4b453ab96e2b5d8a612aa3687ea6ec523f
 
 RUN mkdir -p /opt/cspenguin \
     && curl -fL --retry 3 --connect-timeout 30 \
