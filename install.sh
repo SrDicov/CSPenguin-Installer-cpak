@@ -18,6 +18,10 @@ done
 CPAK_MODE=0
 [[ -n "${CPAK_CONTAINER_ID:-}" || "${CSPENGUIN_CPAK:-0}" == "1" ]] && CPAK_MODE=1
 
+# Debug knob for prefix creation (e.g. CSPENGUIN_WINEBOOT_DEBUG=+loaddll).
+# Passed through `cpak run --env` without editing the script.
+WINEBOOT_DEBUG="${CSPENGUIN_WINEBOOT_DEBUG:--all}"
+
 DOWNLOAD_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/csp-install"
 
 # colors
@@ -1519,13 +1523,22 @@ fi
 
 step "wine prefix"
 info "setting up a fresh Wine environment for CSP."
+if [[ ! -x "$WINE_BIN" ]]; then
+    die "Wine binary not found at $WINE_BIN"
+fi
+if [[ $DRY_RUN -eq 0 ]]; then
+    if ! "$WINE_BIN" --version >> "$LOG_FILE" 2>&1; then
+        die "Wine runtime at $WINE_DIR failed to start (see $LOG_FILE)"
+    fi
+    ok "Wine runtime smoke test ($(basename "$WINE_DIR"))"
+fi
 if [[ $DRY_RUN -eq 0 ]]; then
     export WINEPREFIX WINEARCH WINESERVER="$WINESERVER_BIN"
     "$WINESERVER_BIN" -k 2>/dev/null || true
     wineserver -k 2>/dev/null || true
     sleep 0.5
 fi
-wait_for "initialising prefix" env WINEDEBUG=-all wineboot --init
+wait_for "initialising prefix" env "WINEDEBUG=$WINEBOOT_DEBUG" wineboot --init
 
 if [[ $CPAK_MODE -eq 1 ]]; then
     ok "esync file limits (cpak runtime)"
