@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 CPAK_VERSION=v2.13.3
-CPAK_ORIGIN=github.com/crowrei34/uwuawa
+CPAK_ORIGIN=github.com/srdicov/cspenguin-installer-cpak
 INSTALL_DIR="${CPAK_INSTALL_DIR:-$HOME/.local/bin}"
 
 [[ "$(uname -m)" == "x86_64" ]] || {

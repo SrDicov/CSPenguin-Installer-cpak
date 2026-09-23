@@ -9,6 +9,8 @@ WINE_URL="https://github.com/Kron4ek/Wine-Builds/releases/download/${WINE_VERSIO
 WINE_SHA256=b98761339edb5cf9a3f622fa08de2d4b453ab96e2b5d8a612aa3687ea6ec523
 WINE_ARCHIVE="$DATA_DIR/wine-${WINE_VERSION}-amd64.tar.xz"
 WINE_DIR="$DATA_DIR/wine-${WINE_VERSION}"
+# Baked Wine runtime shipped inside the cpak image (preferred at runtime).
+BAKED_WINE_DIR="/opt/cspenguin/wine-${WINE_VERSION}"
 PREFIX="${WINEPREFIX:-$HOME/.wine-csp}"
 PAINT_EXE="$PREFIX/drive_c/Program Files/CELSYS/CLIP STUDIO 1.5/CLIP STUDIO PAINT/CLIPStudioPaint.exe"
 PAINT_LAUNCHER="$HOME/.local/share/cspenguin/csp-launch.sh"
@@ -25,6 +27,7 @@ _find_wine() {
         [[ -x "$_candidate" ]] && { printf '%s\n' "$_candidate"; return; }
     fi
     for _candidate in \
+        "$BAKED_WINE_DIR/bin/wine" \
         "$HOME/.local/share/cspenguin"/wine-*/bin/wine \
         "$DATA_DIR"/wine-*/bin/wine; do
         [[ -x "$_candidate" ]] && { printf '%s\n' "$_candidate"; return; }

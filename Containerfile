@@ -25,6 +25,25 @@ RUN dpkg --add-architecture i386 \
         zstd \
     && rm -rf /var/lib/apt/lists/*
 
+# Baked Wine runtime (Kron4ek build, checksum-verified).
+# First-launch then reuses this instead of downloading Wine to the user home.
+ARG WINE_VERSION=11.4
+ARG WINE_SHA256=b98761339edb5cf9a3f622fa08de2d4b453ab96e2b5d8a612aa3687ea6ec523
+
+RUN mkdir -p /opt/cspenguin \
+    && curl -fL --retry 3 --connect-timeout 30 \
+        -o /tmp/wine-${WINE_VERSION}-amd64.tar.xz \
+        "https://github.com/Kron4ek/Wine-Builds/releases/download/${WINE_VERSION}/wine-${WINE_VERSION}-amd64.tar.xz" \
+    && printf '%s  %s\n' "${WINE_SHA256}" "/tmp/wine-${WINE_VERSION}-amd64.tar.xz" | sha256sum -c - \
+    && tar -xJf /tmp/wine-${WINE_VERSION}-amd64.tar.xz -C /opt/cspenguin \
+    && for d in /opt/cspenguin/wine-${WINE_VERSION}-staging-amd64 \
+                /opt/cspenguin/wine-${WINE_VERSION}-amd64 \
+                /opt/cspenguin/wine-${WINE_VERSION}-plain-amd64; do \
+         if [ -d "$d" ]; then mv "$d" /opt/cspenguin/wine-${WINE_VERSION}; break; fi; \
+       done \
+    && rm -f /tmp/wine-${WINE_VERSION}-amd64.tar.xz \
+    && test -x /opt/cspenguin/wine-${WINE_VERSION}/bin/wine
+
 COPY install.sh /opt/cspenguin/install.sh
 COPY cpak-launcher.sh /usr/local/bin/cspenguin-cpak
 COPY cpak-launcher.sh /usr/local/bin/cspenguin-studio-cpak

@@ -1,0 +1,5 @@
+*.AppImage
+opencode-*
+*.log
+work/
+outputs/

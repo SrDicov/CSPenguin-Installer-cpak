@@ -75,7 +75,7 @@ die() {
     echo ""
     echo -e "  ${RED}✗ ERROR:${RESET} $1"
     [[ -n "${LOG_FILE:-}" ]] && echo -e "  ${DIM}log: $LOG_FILE${RESET}"
-    echo -e "  ${DIM}https://github.com/parka6060/CSPenguin-Installer/issues${RESET}"
+    echo -e "  ${DIM}https://github.com/SrDicov/CSPenguin-Installer-cpak/issues${RESET}"
     _log "ERROR: $1"
     exit 1
 }
@@ -87,7 +87,7 @@ _on_error() {
     echo ""
     echo -e "  ${RED}✗ ERROR:${RESET} unexpected failure at line ${_line}: ${_cmd} (exit ${_exit})"
     [[ -n "${LOG_FILE:-}" ]] && echo -e "  ${DIM}log: $LOG_FILE${RESET}"
-    echo -e "  ${DIM}https://github.com/parka6060/CSPenguin-Installer/issues${RESET}"
+    echo -e "  ${DIM}https://github.com/SrDicov/CSPenguin-Installer-cpak/issues${RESET}"
 }
 
 # cleanup
@@ -112,6 +112,7 @@ WINEARCH=win64
 
 WINE_VERSION="11.4"
 WINE_URL="https://github.com/Kron4ek/Wine-Builds/releases/download/${WINE_VERSION}/wine-${WINE_VERSION}-amd64.tar.xz"
+WINE_SHA256="b98761339edb5cf9a3f622fa08de2d4b453ab96e2b5d8a612aa3687ea6ec523"
 FREETYPE_VERSION="2.13.2"
 FREETYPE_URL="https://archive.archlinux.org/packages/f/freetype2/freetype2-${FREETYPE_VERSION}-1-x86_64.pkg.tar.zst"
 FREETYPE32_URL="https://archive.archlinux.org/packages/l/lib32-freetype2/lib32-freetype2-${FREETYPE_VERSION}-1-x86_64.pkg.tar.zst"
@@ -132,6 +133,16 @@ WINE_DIR="${CSPENGUIN_WINE_DIR:-$LAUNCHER_DIR/wine-${WINE_VERSION}}"
 WINE_BIN="$WINE_DIR/bin/wine"
 WINESERVER_BIN="$WINE_DIR/bin/wineserver"
 FREETYPE_DIR="$WINE_DIR/lib/freetype2-${FREETYPE_VERSION}"
+# Baked Wine runtime shipped inside the cpak image (see Containerfile).
+# In cpak mode it takes precedence over the per-user runtime so first-launch
+# needs no Wine download; explicit $CSPENGUIN_WINE_DIR still wins.
+BAKED_WINE_DIR="/opt/cspenguin/wine-${WINE_VERSION}"
+if [[ $CPAK_MODE -eq 1 && -z "${CSPENGUIN_WINE_DIR:-}" && ! -x "$WINE_BIN" && -x "$BAKED_WINE_DIR/bin/wine" ]]; then
+    WINE_DIR="$BAKED_WINE_DIR"
+    WINE_BIN="$WINE_DIR/bin/wine"
+    WINESERVER_BIN="$WINE_DIR/bin/wineserver"
+    FREETYPE_DIR="$WINE_DIR/lib/freetype2-${FREETYPE_VERSION}"
+fi
 WINETRICKS_BIN="$LAUNCHER_DIR/winetricks"
 LAUNCH_SCRIPT="$LAUNCHER_DIR/csp-launch.sh"
 LAUNCHER_STUDIO="$LAUNCHER_DIR/clipstudio-launch.sh"
@@ -590,6 +601,11 @@ _try_fetch_patch() {
 # ============================================================
 _extract_wine() {
     local _wine_tar="$1"
+    if [[ $DRY_RUN -eq 0 ]]; then
+        local _sum
+        _sum=$(sha256sum "$_wine_tar" | cut -d' ' -f1)
+        [[ "$_sum" == "$WINE_SHA256" ]] || die "Wine checksum mismatch (got $_sum)"
+    fi
     info "extracting Wine ${WINE_VERSION}..."
     rm -rf "$WINE_DIR"
     mkdir -p "$LAUNCHER_DIR"
@@ -788,10 +804,17 @@ _bundle_freetype() {
 # ============================================================
 _write_launchers() {
     _freeze_webview2_fixed || true
+    # In cpak mode FreeType comes from the image system libraries
+    # (_bundle_freetype is a no-op there), so don't point launchers
+    # at a bundle directory that was never created.
+    local _ft_ld=""
+    if [[ $CPAK_MODE -eq 0 ]]; then
+        _ft_ld="$FREETYPE_DIR/lib64:$FREETYPE_DIR/lib32:"
+    fi
     cat > "$LAUNCH_SCRIPT" << LAUNCHEOF
 #!/usr/bin/env bash
 ulimit -n 524288 2>/dev/null || true
-export LD_LIBRARY_PATH="$FREETYPE_DIR/lib64:$FREETYPE_DIR/lib32:\${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$_ft_ld\${LD_LIBRARY_PATH:-}"
 export PATH="$WINE_DIR/bin:\$PATH"
 export WINESERVER="$WINESERVER_BIN"
 export WINEPREFIX="$WINEPREFIX"
@@ -869,7 +892,7 @@ LAUNCHEOF
     cat > "$LAUNCHER_STUDIO" << LAUNCHEOF
 #!/usr/bin/env bash
 ulimit -n 524288 2>/dev/null || true
-export LD_LIBRARY_PATH="$FREETYPE_DIR/lib64:$FREETYPE_DIR/lib32:\${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$_ft_ld\${LD_LIBRARY_PATH:-}"
 export PATH="$WINE_DIR/bin:\$PATH"
 export WINESERVER="$WINESERVER_BIN"
 export WINEPREFIX="$WINEPREFIX"
@@ -1083,6 +1106,9 @@ fi
 # --update-wine / -w : install the supported Wine runtime without reinstalling CSP
 # ============================================================
 if [[ $UPDATE_WINE -eq 1 ]]; then
+    if [[ $CPAK_MODE -eq 1 ]]; then
+        die "Wine is baked into the cpak image; rebuild the image to change Wine versions"
+    fi
     echo ""
     echo -e "  ${TEAL}${BOLD}[*] Wine update mode${RESET}"
     echo ""
@@ -1099,7 +1125,7 @@ if [[ $UPDATE_WINE -eq 1 ]]; then
     _upstream_latest=$(_latest_kron4ek_wine || true)
     if [[ -n "$_upstream_latest" ]] && [[ "$_upstream_latest" != "$WINE_VERSION" ]]; then
         warn "Wine $_upstream_latest is available upstream, but this installer's patches are only tested against Wine $WINE_VERSION"
-        info "check https://github.com/parka6060/CSPenguin-Installer for an updated installer script"
+        info "check https://github.com/SrDicov/CSPenguin-Installer-cpak for an updated installer script"
     fi
 
     if [[ "$_current_wine" == "$WINE_VERSION" ]]; then
@@ -1413,8 +1439,13 @@ _queue_dl() {
     _dl_tmps+=("$tmp")
 }
 
-[[ $_need_wine -eq 1 ]] && _queue_dl "Wine ${WINE_VERSION}" "$WINE_URL" "$_wine_tar" \
-                         || ok "Wine ${WINE_VERSION} (cached)"
+if [[ $_need_wine -eq 1 ]]; then
+    _queue_dl "Wine ${WINE_VERSION}" "$WINE_URL" "$_wine_tar"
+elif [[ "$WINE_DIR" == "$BAKED_WINE_DIR" ]]; then
+    ok "Wine ${WINE_VERSION} (baked into image)"
+else
+    ok "Wine ${WINE_VERSION} (cached)"
+fi
 if [[ $CPAK_MODE -eq 1 ]]; then
     WEBVIEW2_INSTALLER="$WEBVIEW2_MANAGED"
     [[ $DRY_RUN -eq 1 || -f "$WEBVIEW2_INSTALLER" ]] || die "WebView2 runtime source is missing"
@@ -1941,7 +1972,7 @@ echo -e "                   (Dolphin: Configure Dolphin > Interface > Previews"
 echo -e "                    > tick \"Clip Studio Paint File\", then restart Dolphin)"
 echo ""
 echo -e "  ${DIM}something not working? open an issue at${RESET}"
-echo -e "  ${DIM}https://github.com/parka6060/CSPenguin-Installer${RESET}"
+  echo -e "  ${DIM}https://github.com/SrDicov/CSPenguin-Installer-cpak${RESET}"
 echo ""
 echo -e "  ${DIM}installer by https://eninabox.art${RESET}"
 echo ""

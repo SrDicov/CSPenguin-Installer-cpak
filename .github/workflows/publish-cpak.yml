@@ -46,13 +46,13 @@ jobs:
           file: Containerfile
           platforms: linux/amd64
           push: true
-          tags: ghcr.io/crowrei34/cspenguin-cpak:main
+          tags: ghcr.io/srdicov/cspenguin-installer-cpak:main
           provenance: mode=max
           sbom: true
 
       - name: Pin image digest
         env:
-          IMAGE: ghcr.io/crowrei34/cspenguin-cpak:main
+          IMAGE: ghcr.io/srdicov/cspenguin-installer-cpak:main
         run: |
           digest='${{ steps.build.outputs.digest }}'
           jq --arg image "${IMAGE%:main}@${digest}" '.image = $image' cpak.json > cpak.json.tmp
@@ -74,7 +74,7 @@ jobs:
       - name: Validate and lock package
         run: |
           cpak validate cpak.json
-          cpak lock --origin github.com/crowrei34/uwuawa cpak.json
+          cpak lock --origin github.com/srdicov/cspenguin-installer-cpak cpak.json
 
       - name: Commit manifest
         run: |
