@@ -2,16 +2,16 @@
   "lock_version": "1.0",
   "root": {
     "origin": "github.com/srdicov/cspenguin-installer-cpak",
-    "manifest_sha256": "2e9b34b049f39b9c73ee7dae7210ee7103d6ec36fe69b544b3ef4ce8a809aeb6",
-    "image": "ghcr.io/srdicov/cspenguin-installer-cpak@sha256:8812b84484b494aec285529af4ad904eef0bfbb2249f97df4ba5869c9d88c80e",
-    "resolved_image": "ghcr.io/srdicov/cspenguin-installer-cpak@sha256:a590d239d1f395124bce66d44d67049b9e2322d174247618c78a3a389fc47dfa",
+    "manifest_sha256": "e52dfd9dcaadf2b16e2542bdae71b31845e2e4e9d991e72f93e0a6476133f34a",
+    "image": "ghcr.io/srdicov/cspenguin-installer-cpak@sha256:6de8960c73263cbfd882bb4d3d4533cd4f9ac4060f0da51cf4f0848ad7eb1b09",
+    "resolved_image": "ghcr.io/srdicov/cspenguin-installer-cpak@sha256:bebf9d663414e6436e28cbb4cc35251084a21f9eac0c69debba1f7dd1f46186d",
     "manifest": {
       "$schema": "https://raw.githubusercontent.com/Containerpak/cpak/v2/schema/manifest-v3.json",
       "manifest_version": "3.0",
       "name": "CSPenguin Clip Studio Paint",
       "description": "Clip Studio Paint running in a portable cpak environment.",
       "version": "0.1.0",
-      "image": "ghcr.io/srdicov/cspenguin-installer-cpak@sha256:8812b84484b494aec285529af4ad904eef0bfbb2249f97df4ba5869c9d88c80e",
+      "image": "ghcr.io/srdicov/cspenguin-installer-cpak@sha256:6de8960c73263cbfd882bb4d3d4533cd4f9ac4060f0da51cf4f0848ad7eb1b09",
       "binaries": [
         "/usr/local/bin/cspenguin-cpak",
         "/usr/local/bin/cspenguin-studio-cpak"

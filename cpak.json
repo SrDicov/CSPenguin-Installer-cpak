@@ -4,7 +4,7 @@
   "name": "CSPenguin Clip Studio Paint",
   "description": "Clip Studio Paint running in a portable cpak environment.",
   "version": "0.1.0",
-  "image": "ghcr.io/srdicov/cspenguin-installer-cpak@sha256:8812b84484b494aec285529af4ad904eef0bfbb2249f97df4ba5869c9d88c80e",
+  "image": "ghcr.io/srdicov/cspenguin-installer-cpak@sha256:6de8960c73263cbfd882bb4d3d4533cd4f9ac4060f0da51cf4f0848ad7eb1b09",
   "runtime_sources": [
     {
       "name": "MicrosoftEdgeWebView2RuntimeInstallerX64.exe",
