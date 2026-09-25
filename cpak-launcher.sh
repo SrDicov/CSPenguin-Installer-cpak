@@ -105,17 +105,9 @@ if [[ -x "$_launcher" && -f "$PAINT_EXE" ]]; then
     exec "$_launcher" "$@"
 fi
 
-if [[ -t 0 && -t 1 ]]; then
-    "$APP_ROOT/install.sh" "$@"
-else
-    command -v xterm >/dev/null 2>&1 || {
-        printf '%s\n' "A terminal is required for the first launch." >&2
-        exit 1
-    }
-    # -fa renders client-side via fontconfig (DejaVu ships in the image):
-    # the nested X server has no core bitmap fonts, so the default
-    # misc-fixed face comes up blank there.
-    xterm -fa 'DejaVu Sans Mono' -T "CSPenguin Setup" -e "$APP_ROOT/install.sh" "$@"
-fi
+# First launch: run the installer directly in the foreground so its
+# output streams to `cpak logs`. (A throwaway xterm used to host it,
+# but xterm's X connection proved too fragile as a setup console.)
+"$APP_ROOT/install.sh" "$@"
 [[ -x "$_launcher" ]] || { printf '%s\n' "Setup did not complete (see ${XDG_CACHE_HOME:-$HOME/.cache}/csp-install/csp-install.log)" >&2; exit 1; }
 exec "$_launcher" "$@"

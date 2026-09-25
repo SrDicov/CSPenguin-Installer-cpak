@@ -1222,16 +1222,17 @@ info "setting up a fresh Wine environment for CSP."
 if [[ ! -x "$WINE_BIN" ]]; then
     die "Wine binary not found at $WINE_BIN"
 fi
+# Export before anything starts a server: the smoke test's wineserver
+# and the kills below must all target this prefix, otherwise a stray
+# server for the default prefix fights wineboot over the socket dir
+# and the boot dies with "could not load kernel32.dll".
+export WINEPREFIX WINEARCH WINESERVER="$WINESERVER_BIN"
 if [[ $DRY_RUN -eq 0 ]]; then
     if ! "$WINE_BIN" --version >> "$LOG_FILE" 2>&1; then
         die "Wine runtime at $WINE_DIR failed to start (see $LOG_FILE)"
     fi
     ok "Wine runtime smoke test ($(basename "$WINE_DIR"))"
-fi
-if [[ $DRY_RUN -eq 0 ]]; then
-    export WINEPREFIX WINEARCH WINESERVER="$WINESERVER_BIN"
-    # A prefix booted against a half-dead wineserver fails with
-    # "could not load kernel32.dll, status c0000135", so ask any
+    # A prefix booted against a half-dead wineserver fails, so ask any
     # stale server to stop and wait until it is really gone.
     "$WINESERVER_BIN" -k 2>/dev/null || true
     wineserver -k 2>/dev/null || true
@@ -1388,7 +1389,14 @@ else
     msg "press enter to launch the CSP installer."
     msg "complete the installer as normal."
     gap
+    if [[ -t 0 ]]; then
         read -rp "press enter to continue..." </dev/tty
+    else
+        # No terminal (cpak desktop launch): give the user a moment to
+        # notice, then proceed; follow progress with `cpak logs`.
+        info "launching CSP installer in 30s (non-interactive)..."
+        sleep 30
+    fi
     info "CSP installer running, come back when done..."
     run wine reg add "HKCU\\Software\\Wine\\AppDefaults\\$CSP_EXE_NAME" /v Version /t REG_SZ /d "win81" /f || warn "failed to set installer compatibility"
     env WINEDEBUG=-all \
