@@ -112,7 +112,10 @@ else
         printf '%s\n' "A terminal is required for the first launch." >&2
         exit 1
     }
-    xterm -T "CSPenguin Setup" -e "$APP_ROOT/install.sh" "$@"
+    # -fa renders client-side via fontconfig (DejaVu ships in the image):
+    # the nested X server has no core bitmap fonts, so the default
+    # misc-fixed face comes up blank there.
+    xterm -fa 'DejaVu Sans Mono' -T "CSPenguin Setup" -e "$APP_ROOT/install.sh" "$@"
 fi
 [[ -x "$_launcher" ]] || { printf '%s\n' "Setup did not complete (see ${XDG_CACHE_HOME:-$HOME/.cache}/csp-install/csp-install.log)" >&2; exit 1; }
 exec "$_launcher" "$@"
