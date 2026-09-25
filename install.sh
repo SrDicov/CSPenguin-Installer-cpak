@@ -1237,7 +1237,22 @@ if [[ $DRY_RUN -eq 0 ]]; then
     wineserver -k 2>/dev/null || true
     timeout 15 "$WINESERVER_BIN" -w 2>/dev/null || true
 fi
-wait_for "initialising prefix" env "WINEDEBUG=$WINEBOOT_DEBUG" wineboot --init
+# wineboot flops intermittently inside constrained sandboxes with
+# "could not load kernel32.dll, status c0000135" (~50%); a retry
+# usually boots fine, so don't die on the first attempt.
+# (Subshell: wait_for's die() aborts the attempt, not the installer.
+# Never rm the prefix here: on reinstalls it holds the user's CSP.)
+_prefix_done=0
+for _attempt in 1 2 3; do
+    if [[ $_attempt -gt 1 ]]; then
+        warn "prefix init failed, retrying ($_attempt/3)..."
+        "$WINESERVER_BIN" -k 2>/dev/null || true
+        timeout 15 "$WINESERVER_BIN" -w 2>/dev/null || true
+    fi
+    ( wait_for "initialising prefix" env "WINEDEBUG=$WINEBOOT_DEBUG" wineboot --init ) \
+        && { _prefix_done=1; break; }
+done
+[[ $_prefix_done -eq 1 ]] || die "initialising prefix failed"
 
 if [[ $CPAK_MODE -eq 1 ]]; then
     ok "esync file limits (cpak runtime)"
