@@ -54,23 +54,6 @@
     "network": true,
     "openURI": true,
     "notification": true,
-    "socketWayland": false,
-    "socketSshAgent": false,
-    "socketCups": false,
-    "socketGpgAgent": false,
-    "bluetooth": false,
-    "deviceKvm": false,
-    "deviceAlsa": false,
-    "deviceVideo": false,
-    "deviceFuse": false,
-    "deviceTun": false,
-    "deviceSerial": false,
-    "deviceTTY": false,
-    "deviceAll": false,
-    "hostApplications": false,
-    "process": false,
-    "userNamespaces": false,
-    "asRoot": false,
     "env": []
   }
 }

@@ -10,6 +10,7 @@ RUN dpkg --add-architecture i386 \
         desktop-file-utils \
         file \
         fontconfig \
+        fonts-dejavu-core \
         gstreamer1.0-plugins-bad \
         gstreamer1.0-plugins-base \
         gstreamer1.0-plugins-good \
@@ -20,6 +21,7 @@ RUN dpkg --add-architecture i386 \
         wget \
         wmctrl \
         x11-utils \
+        xfonts-base \
         xterm \
         xz-utils \
         zstd \

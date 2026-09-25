@@ -17,16 +17,13 @@ for command_name in sha256sum install mktemp; do
     }
 done
 
+command -v curl >/dev/null 2>&1 || {
+    printf '%s\n' "curl is required." >&2
+    exit 1
+}
+
 download() {
-    local source_url="$1" destination="$2"
-    if command -v curl >/dev/null 2>&1; then
-        curl -fL --retry 3 --connect-timeout 30 -o "$destination" "$source_url"
-    elif command -v wget >/dev/null 2>&1; then
-        wget --https-only --tries=3 --timeout=30 -O "$destination" "$source_url"
-    else
-        printf '%s\n' "curl or wget is required." >&2
-        exit 1
-    fi
+    curl -fL --retry 3 --connect-timeout 30 -o "$2" "$1"
 }
 
 TEMP_DIR=$(mktemp -d)

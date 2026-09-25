@@ -35,13 +35,9 @@ _find_wine() {
     command -v wine 2>/dev/null || true
 }
 
+# ponytail: dirname arithmetic; PATH fallback resolves to dirname of the resolved binary
 _wine_dir() {
-    local _wine_bin="$1"
-    if [[ "$_wine_bin" == */bin/wine ]]; then
-        dirname "$(dirname "$_wine_bin")"
-    else
-        dirname "$_wine_bin"
-    fi
+    [[ "$1" == */bin/wine ]] && echo "${1%/bin/wine}" || dirname "$1"
 }
 
 _download_wine() {
@@ -118,5 +114,5 @@ else
     }
     xterm -T "CSPenguin Setup" -e "$APP_ROOT/install.sh" "$@"
 fi
-[[ -x "$_launcher" ]] || { printf '%s\n' "Clip Studio Paint is not installed" >&2; exit 1; }
+[[ -x "$_launcher" ]] || { printf '%s\n' "Setup did not complete (see ${XDG_CACHE_HOME:-$HOME/.cache}/csp-install/csp-install.log)" >&2; exit 1; }
 exec "$_launcher" "$@"

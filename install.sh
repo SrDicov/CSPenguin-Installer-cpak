@@ -24,23 +24,8 @@ WINEBOOT_DEBUG="${CSPENGUIN_WINEBOOT_DEBUG:--all}"
 
 DOWNLOAD_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/csp-install"
 
-# colors
-_setup_colors() {
-    if [[ -t 1 ]] && [[ "${TERM:-dumb}" != "dumb" ]] \
-       && command -v tput &>/dev/null \
-       && [[ "$(tput colors 2>/dev/null || echo 0)" -ge 256 ]]; then
-        TEAL='\033[38;5;30m'
-        AMBER='\033[38;5;179m'
-        YELLOW='\033[38;5;178m'
-        RED='\033[38;5;160m'
-        BOLD='\033[1m'
-        DIM='\033[2m'
-        RESET='\033[0m'
-    else
-        TEAL='' AMBER='' YELLOW='' RED='' BOLD='' DIM='' RESET=''
-    fi
-}
-_setup_colors
+# colors (plain output; no 256-color probing)
+# (plain output, no colors)
 
 # formatting
 TOTAL_STEPS=7
@@ -55,31 +40,29 @@ _root() {
         "$@"
     elif command -v sudo >/dev/null 2>&1; then
         sudo "$@"
-    elif command -v doas >/dev/null 2>&1; then
-        doas "$@"
     else
-        die "sudo or doas is required for system changes"
+        die "sudo is required for system changes"
     fi
 }
 
 step() {
     STEP=$((STEP + 1))
     echo ""
-    echo -e "  ${TEAL}│${RESET} ${TEAL}${BOLD}[${STEP}/${TOTAL_STEPS}] $1${RESET}"
+    echo "[${STEP}/${TOTAL_STEPS}] $1"
     _log "[STEP ${STEP}/${TOTAL_STEPS}] $1"
 }
 
-ok()   { echo -e "  ${TEAL}│${RESET} ${AMBER}+${RESET} $1"; _log "OK: $1"; }
-warn() { echo -e "  ${TEAL}│${RESET} ${YELLOW}!${RESET} ${YELLOW}$1${RESET}"; _log "WARN: $1"; }
-info() { echo -e "  ${TEAL}│${RESET} ${DIM}- $1${RESET}"; _log "INFO: $1"; }
-gap()  { echo -e "  ${TEAL}│${RESET}"; }
-msg()  { echo -e "  ${TEAL}│${RESET} $1"; _log "$1"; }
+ok()   { echo "+ $1"; _log "OK: $1"; }
+warn() { echo "! $1"; _log "WARN: $1"; }
+info() { echo "- $1"; _log "INFO: $1"; }
+gap()  { echo ""; }
+msg()  { echo "$1"; _log "$1"; }
 
 die() {
     echo ""
-    echo -e "  ${RED}✗ ERROR:${RESET} $1"
-    [[ -n "${LOG_FILE:-}" ]] && echo -e "  ${DIM}log: $LOG_FILE${RESET}"
-    echo -e "  ${DIM}https://github.com/SrDicov/CSPenguin-Installer-cpak/issues${RESET}"
+    echo "ERROR: $1"
+    [[ -n "${LOG_FILE:-}" ]] && echo "log: $LOG_FILE"
+    echo "https://github.com/SrDicov/CSPenguin-Installer-cpak/issues"
     _log "ERROR: $1"
     exit 1
 }
@@ -89,9 +72,9 @@ _on_error() {
     local _exit=$? _line="$1" _cmd="$2"
     _log "UNEXPECTED ERROR at line ${_line} (exit ${_exit}): ${_cmd}"
     echo ""
-    echo -e "  ${RED}✗ ERROR:${RESET} unexpected failure at line ${_line}: ${_cmd} (exit ${_exit})"
-    [[ -n "${LOG_FILE:-}" ]] && echo -e "  ${DIM}log: $LOG_FILE${RESET}"
-    echo -e "  ${DIM}https://github.com/SrDicov/CSPenguin-Installer-cpak/issues${RESET}"
+    echo "ERROR: unexpected failure at line ${_line}: ${_cmd} (exit ${_exit})"
+    [[ -n "${LOG_FILE:-}" ]] && echo "log: $LOG_FILE"
+    echo "https://github.com/SrDicov/CSPenguin-Installer-cpak/issues"
 }
 
 # cleanup
@@ -169,21 +152,17 @@ run() {
     return "$_rc"
 }
 
-_find_webview2_fixed() {
+# copy the newest installed WebView2 runtime into the fixed portable dir
+_freeze_webview2_fixed() {
     local _root _dir
     for _root in "$WEBVIEW2_FIXED_ROOT" "$WEBVIEW2_INSTALLED_ROOT"; do
         _dir=$(find "$_root" -mindepth 1 -maxdepth 1 -type d -name '[0-9]*' -print 2>/dev/null | sort -V | tail -n 1 || true)
         if [[ -n "$_dir" && -f "$_dir/msedgewebview2.exe" ]]; then
             WEBVIEW2_FIXED_DIR="$_dir"
-            return 0
+            break
         fi
     done
-    WEBVIEW2_FIXED_DIR=""
-    return 1
-}
-
-_freeze_webview2_fixed() {
-    _find_webview2_fixed || return 1
+    [[ -n "${WEBVIEW2_FIXED_DIR:-}" && -f "$WEBVIEW2_FIXED_DIR/msedgewebview2.exe" ]] || { WEBVIEW2_FIXED_DIR=""; return 1; }
     if [[ "$WEBVIEW2_FIXED_DIR" == "$WEBVIEW2_FIXED_ROOT"/* ]]; then
         return 0
     fi
@@ -217,13 +196,6 @@ fetch_asset() {
     mv "$tmp" "$dest"
 }
 
-ensure_asset() {
-    local rel="$1" dest="$2"
-    if [[ ! -f "$dest" ]]; then
-        fetch_asset "$rel" "$dest"
-    fi
-}
-
 # winetricks' cjkfonts pulls in a 112MB/28-face font (Source Han Sans >:C) that adds ~60s to every CSP startup. Swap it for something smaller to fix boot time. use --update to update your prefix.
 install_cjk_font_fix() {
     local font_file="wqy-microhei.ttc"
@@ -235,7 +207,7 @@ install_cjk_font_fix() {
     fi
 
     local font_src="$SCRIPT_DIR/patches/fonts/$font_file"
-    ensure_asset "patches/fonts/$font_file" "$font_src"
+    fetch_asset "patches/fonts/$font_file" "$font_src"
     if [[ ! -f "$font_src" ]]; then
         warn "CJK font asset missing, skipping"
         return
@@ -403,23 +375,8 @@ wait_for() {
         ok "$msg (dry run)"
         return
     fi
-    if [[ $VERBOSE -eq 1 ]]; then
-        info "$msg"
-        run "$@" || die "$msg failed"
-        ok "$msg"
-        return
-    fi
-    local -a frames=('|' '/' '-' '\')
-    local i=0
-    run "$@" &
-    local pid=$!
-    while kill -0 "$pid" 2>/dev/null; do
-        printf "\r  ${TEAL}│${RESET} ${TEAL}%s${RESET} %s  " "${frames[$((i % 4))]}" "$msg"
-        sleep 0.2
-        i=$((i + 1))
-    done
-    wait "$pid" || die "$msg failed"
-    printf "\r"
+    info "$msg"
+    run "$@" || die "$msg failed"
     ok "$msg"
 }
 
@@ -433,35 +390,9 @@ download_progress() {
         ok "$name (dry run)"
         return
     fi
-    local total
-    total=$(curl -fsSIL "$url" \
-        | awk 'tolower($1)=="content-length:" {print $2}' \
-        | tail -1 | tr -d '\r' || true)
-    local tmp="${dest}.part"
-    if [[ -z "$total" ]] || ! [[ "$total" =~ ^[0-9]+$ ]] || [[ "$total" -eq 0 ]]; then
-        wait_for "$name" wget -q --timeout=30 --tries=3 -O "$tmp" "$url"
-        mv "$tmp" "$dest"
-        return
-    fi
     info "$name"
-    wget -q --timeout=30 --tries=3 -O "$tmp" "$url" &
-    local pid=$!
-    local bw=30 current=0 pct=0 filled=0 empty=0
-    while kill -0 "$pid" 2>/dev/null; do
-        [[ -f "$tmp" ]] && current=$(stat -c%s "$tmp" 2>/dev/null || echo 0)
-        pct=$((current * 100 / total))
-        [[ $pct -gt 100 ]] && pct=100
-        filled=$((pct * bw / 100))
-        empty=$((bw - filled))
-        printf "\r  ${TEAL}│${RESET}   ${AMBER}%s${RESET}${DIM}%s${RESET} %3d%%  %dMB/%dMB  " \
-            "$(printf '█%.0s' $(seq 1 $filled) 2>/dev/null)" \
-            "$(printf '░%.0s' $(seq 1 $empty) 2>/dev/null)" \
-            "$pct" "$((current / 1048576))" "$((total / 1048576))"
-        sleep 0.3
-    done
-    wait "$pid" || die "download failed: $name"
-    printf "\r  ${TEAL}│${RESET}   ${AMBER}%s${RESET} 100%%  %dMB/%dMB  \n" \
-        "$(printf '█%.0s' $(seq 1 $bw))" "$((total / 1048576))" "$((total / 1048576))"
+    local tmp="${dest}.part"
+    wget --show-progress -q --timeout=30 --tries=3 -O "$tmp" "$url" || die "download failed: $name"
     mv "$tmp" "$dest"
     ok "$name"
 }
@@ -487,59 +418,35 @@ _pm_install() {
 
 _gst_ok() { command -v gst-inspect-1.0 >/dev/null 2>&1 && gst-inspect-1.0 h264parse >/dev/null 2>&1; }
 
-_install_deps_pacman() {
+# single dependency installer: common tool probes + per-distro extras
+_install_deps() {
+    local _pm="$(_detect_pm)"
     local pkgs=()
-    command -v wget    >/dev/null 2>&1 || pkgs+=(wget)
-    command -v curl    >/dev/null 2>&1 || pkgs+=(curl)
-    command -v wmctrl  >/dev/null 2>&1 || pkgs+=(wmctrl)
-    command -v xprop   >/dev/null 2>&1 || pkgs+=(xorg-xprop)
-    command -v unzstd  >/dev/null 2>&1 || pkgs+=(zstd)
-    command -v file    >/dev/null 2>&1 || pkgs+=(file)
-    command -v cabextract >/dev/null 2>&1 || pkgs+=(cabextract)
-    _gst_ok          || pkgs+=(gst-plugins-bad gst-plugins-good)
-    [[ ${#pkgs[@]} -gt 0 ]] && _pm_install "${pkgs[@]}"
-}
-
-_install_deps_dnf() {
-    local pkgs=(freetype.i686)
-    command -v wget    >/dev/null 2>&1 || pkgs+=(wget)
-    command -v curl    >/dev/null 2>&1 || pkgs+=(curl)
-    command -v wmctrl  >/dev/null 2>&1 || pkgs+=(wmctrl)
-    command -v xprop   >/dev/null 2>&1 || pkgs+=(xprop)
-    command -v unzstd  >/dev/null 2>&1 || pkgs+=(zstd)
-    command -v file    >/dev/null 2>&1 || pkgs+=(file)
-    command -v cabextract >/dev/null 2>&1 || pkgs+=(cabextract)
-    _gst_ok          || pkgs+=(gstreamer1-tools gstreamer1-plugins-bad-free gstreamer1-plugins-good)
-    _pm_install "${pkgs[@]}"
-}
-
-_install_deps_apt() {
-    local pkgs=(dirmngr ca-certificates)
-    command -v wget    >/dev/null 2>&1 || pkgs+=(wget)
-    command -v curl    >/dev/null 2>&1 || pkgs+=(curl)
-    command -v wmctrl  >/dev/null 2>&1 || pkgs+=(wmctrl)
-    command -v xprop   >/dev/null 2>&1 || pkgs+=(x11-utils)
-    command -v unzstd  >/dev/null 2>&1 || pkgs+=(zstd)
-    command -v file    >/dev/null 2>&1 || pkgs+=(file)
-    command -v cabextract >/dev/null 2>&1 || pkgs+=(cabextract)
-    _gst_ok          || pkgs+=(gstreamer1.0-plugins-bad gstreamer1.0-plugins-good)
-    _pm_install "${pkgs[@]}"
-}
-
-_install_deps_xbps() {
-    if ! xbps-query -l void-repo-multilib 2>/dev/null | grep -q "^ii void-repo-multilib-"; then
-        _pm_install void-repo-multilib
-    fi
-    local pkgs=(freetype freetype-32bit shared-mime-info desktop-file-utils)
+    case "$_pm" in
+        xbps)
+            xbps-query -l void-repo-multilib 2>/dev/null | grep -q "^ii void-repo-multilib-" \
+                || _root xbps-install -S -y void-repo-multilib
+            pkgs+=(freetype freetype-32bit shared-mime-info desktop-file-utils) ;;
+        dnf)   pkgs+=(freetype.i686) ;;
+        apt)   pkgs+=(dirmngr ca-certificates) ;;
+        pacman) ;;
+        *) die "unsupported distro, install wget, curl, and gstreamer plugins manually" ;;
+    esac
     command -v wget >/dev/null 2>&1 || pkgs+=(wget)
     command -v curl >/dev/null 2>&1 || pkgs+=(curl)
-    command -v wmctrl >/dev/null 2>&1 || pkgs+=(wmctrl)
-    command -v xprop >/dev/null 2>&1 || pkgs+=(xprop)
     command -v unzstd >/dev/null 2>&1 || pkgs+=(zstd)
-    command -v file >/dev/null 2>&1 || pkgs+=(file)
     command -v cabextract >/dev/null 2>&1 || pkgs+=(cabextract)
-    _gst_ok || pkgs+=(gstreamer1 gst-plugins-base1 gst-plugins-good1 gst-plugins-bad1)
-    _pm_install "${pkgs[@]}"
+    case "$_pm" in
+        pacman)
+            _gst_ok || pkgs+=(gst-plugins-bad gst-plugins-good) ;;
+        dnf)
+            _gst_ok || pkgs+=(gstreamer1-tools gstreamer1-plugins-bad-free gstreamer1-plugins-good) ;;
+        apt)
+            _gst_ok || pkgs+=(gstreamer1.0-plugins-bad gstreamer1.0-plugins-good) ;;
+        xbps)
+            _gst_ok || pkgs+=(gstreamer1 gst-plugins-base1 gst-plugins-good1 gst-plugins-bad1) ;;
+    esac
+    [[ ${#pkgs[@]} -gt 0 ]] && _pm_install "${pkgs[@]}"
 }
 
 # log file
@@ -563,41 +470,12 @@ _detect_installed_wine() {
     echo "$_v"
 }
 
-# compare two Wine version strings (e.g. "11.4" vs "11.12")
-# echoes 1 if $1 > $2, -1 if $1 < $2, 0 if equal
-_wine_version_cmp() {
-    [[ "$1" == "$2" ]] && { echo 0; return; }
-    local _newest
-    _newest=$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)
-    [[ "$_newest" == "$1" ]] && echo 1 || echo -1
-}
-
-# ============================================================
-# detect latest Wine version from Kron4ek (excluding Proton)
-# ============================================================
-_latest_kron4ek_wine() {
-    local _tags
-    _tags=$(curl -s "https://api.github.com/repos/Kron4ek/Wine-Builds/releases" 2>/dev/null \
-            | grep -oP '"tag_name":\s*"\K[^"]+' | grep -v '^proton' | head -20)
-    if [[ -n "$_tags" ]]; then
-        echo "$_tags" | head -1
-    fi
-}
-
-# ============================================================
-# fetch a patch file from local or remote
-# ============================================================
+# fetch a patch file from local or remote (best effort, no fatal error)
 _try_fetch_patch() {
     local _dir="$1" _rel="$2" _file="$3"
-    [[ -f "$_dir/$_file" ]] && return 0
+    [[ -f "$_dir/$_file" && -s "$_dir/$_file" ]] && return 0
     mkdir -p "$_dir"
-    local _tmp="${_dir}/${_file}.part"
-    if wget -q -O "$_tmp" "$GH_RAW/$_rel/$_file" 2>/dev/null; then
-        mv "$_tmp" "$_dir/$_file"
-        return 0
-    fi
-    rm -f "$_tmp" 2>/dev/null
-    return 1
+    wget -q -O "$_dir/$_file" "$GH_RAW/$_rel/$_file" 2>/dev/null
 }
 
 # ============================================================
@@ -675,48 +553,10 @@ _freetype_missing() {
         || true
 }
 
-# copy-pasteable fix command for the given libs
-_freetype_fix_hint() {
-    local pm="$1"; shift
-    local prefix pkgs=() lib _pair _bits
-    case "$pm" in
-        pacman) prefix="sudo pacman -S" ;;
-        dnf)    prefix="sudo dnf install" ;;
-        apt)    prefix="sudo dpkg --add-architecture i386 && sudo apt update && sudo apt install" ;;
-        xbps)   prefix="sudo xbps-install -S" ;;
-        *)      return ;;
-    esac
-    for lib in "$@"; do
-        _pair=$(_freetype_dep_pkgs "$lib" "$pm")
-        [[ -n "$_pair" ]] || continue
-        read -r -a _bits <<< "$_pair"
-        [[ ${#_bits[@]} -ge 2 ]] || continue
-        pkgs+=("${_bits[1]}")
-    done
-    [[ ${#pkgs[@]} -gt 0 ]] || return
-    printf 'install the 32-bit libraries, for example:\n    %s %s\n' "$prefix" "${pkgs[*]}"
-}
-
-# some distros ship a library under a different soname than the Arch-built
-# FreeType expects (e.g. Fedora ships libbz2.so.1, FreeType wants libbz2.so.1.0).
-# if the real file exists on disk, link the expected name to it.
-_freetype_fix_symlink() {
-    local lib="$1"
-    local base="${lib%.so*}.so"
-    local real target
-    while IFS= read -r real; do
-        [[ -f "$real" ]] || continue
-        target="${real%/*}/$lib"
-        [[ -e "$target" ]] && continue
-        info "linking ${target##*/} -> $(basename "$real")"
-        _root ln -s "$(basename "$real")" "$target" 2>/dev/null || true
-    done < <(find /usr/lib /usr/lib32 /usr/lib64 /lib /lib32 /lib64 -maxdepth 1 -name "$base.*" -type f 2>/dev/null)
-}
-
 # ensure the bundled FreeType can resolve its dependencies, installing the
 # missing 32-bit libraries when possible; dies with a fix hint if not
 _freetype_resolve() {
-    local _missing _pkgs=() _lib _pair _pm _hint
+    local _missing _pkgs=() _lib _pair _pm
     _missing=$(_freetype_missing)
     [[ -n "$_missing" ]] || return 0
     if [[ $DRY_RUN -eq 1 ]]; then
@@ -739,24 +579,8 @@ install the missing 32-bit libraries for your distribution, then re-run the inst
         _pm_install "${_pkgs[@]}" || true
     fi
     _missing=$(_freetype_missing)
-    if [[ -n "$_missing" ]]; then
-        while IFS= read -r _lib; do
-            _freetype_fix_symlink "$_lib"
-        done <<< "$_missing"
-        _missing=$(_freetype_missing)
-    fi
-    if [[ -n "$_missing" ]]; then
-        _hint=$(_freetype_fix_hint "$_pm" $_missing)
-        if [[ -n "$_hint" ]]; then
-            die "bundled FreeType is still missing dependencies: $(tr '\n' ' ' <<< "$_missing")
-
-$_hint
-then re-run the installer"
-        else
-            die "bundled FreeType is still missing dependencies: $(tr '\n' ' ' <<< "$_missing")
+    [[ -z "$_missing" ]] || die "bundled FreeType is still missing dependencies: $(tr '\n' ' ' <<< "$_missing")
 install the missing 32-bit libraries for your distribution, then re-run the installer"
-        fi
-    fi
 }
 
 _bundle_freetype() {
@@ -815,8 +639,9 @@ _write_launchers() {
     if [[ $CPAK_MODE -eq 0 ]]; then
         _ft_ld="$FREETYPE_DIR/lib64:$FREETYPE_DIR/lib32:"
     fi
-    cat > "$LAUNCH_SCRIPT" << LAUNCHEOF
-#!/usr/bin/env bash
+    # environment shared by both launchers; \$ escapes survive into the generated scripts
+    local _env
+    _env=$(cat << LAUNCHENVEOF
 ulimit -n 524288 2>/dev/null || true
 export LD_LIBRARY_PATH="$_ft_ld\${LD_LIBRARY_PATH:-}"
 export PATH="$WINE_DIR/bin:\$PATH"
@@ -847,18 +672,12 @@ WEBVIEW2_FIXED_DIR="$WEBVIEW2_FIXED_DIR"
 if [[ -d "\$WEBVIEW2_FIXED_DIR" ]] && command -v winepath >/dev/null 2>&1; then
     export WEBVIEW2_BROWSER_EXECUTABLE_FOLDER="\$(WINEPREFIX="$WINEPREFIX" winepath --windows "\$WEBVIEW2_FIXED_DIR" 2>/dev/null || true)"
 fi
+LAUNCHENVEOF
+)
+    cat > "$LAUNCH_SCRIPT" << LAUNCHEOF
+#!/usr/bin/env bash
+$_env
 CSP_EXE="$CSP_INSTALL_PATH"
-
-# Pre-load material database into page cache to help speed up loading of materials.
-# CSP stores materials as SQLite files under Documents/CELSYS/ (older versions), and AppData.
-_CSP_USER="$WINEPREFIX/drive_c/users/\$(whoami)"
-for _MATS_DIR in "\$_CSP_USER/Documents/CELSYS" "\$_CSP_USER/AppData/Roaming/CELSYS" "\$_CSP_USER/AppData/Local/CELSYS"; do
-    [[ -d "\$_MATS_DIR" ]] || continue
-    find "\$_MATS_DIR" -name "*.sqlite" -o -name "*.db" 2>/dev/null | while read -r _f; do
-        cat "\$_f" > /dev/null 2>&1 &
-    done
-done
-wait
 
 if [[ -n "\$1" ]] && command -v winepath &>/dev/null; then
     WIN_PATH="\$(WINEPREFIX="$WINEPREFIX" winepath --windows "\$1")"
@@ -867,73 +686,22 @@ else
     wine "\$CSP_EXE" &
 fi
 WINE_PID=\$!
-
-if command -v wmctrl &>/dev/null && command -v xprop &>/dev/null; then
-    (
-        while kill -0 "\$WINE_PID" 2>/dev/null; do
-            while IFS= read -r _wid; do
-                _st=\$(xprop -id "\$_wid" _NET_WM_STATE 2>/dev/null)
-                if [[ "\$_st" == *FULLSCREEN* ]]; then
-                    wmctrl -ir "\$_wid" -b remove,fullscreen 2>/dev/null || true
-                    xprop -id "\$_wid" -spy _NET_WM_STATE 2>/dev/null | while IFS= read -r _line; do
-                        [[ "\$_line" == *FULLSCREEN* ]] && wmctrl -ir "\$_wid" -b remove,fullscreen 2>/dev/null || true
-                    done
-                    exit 0
-                fi
-            done < <(xprop -root _NET_CLIENT_LIST 2>/dev/null | tr ',' '\n' | while IFS= read -r _r; do
-                _w=\$(echo "\$_r" | tr -d ' #')
-                [[ \$(xprop -id "0x\$_w" WM_CLASS 2>/dev/null) == *clipstudiopaint* ]] && echo "0x\$_w"
-            done)
-            sleep 0.5
-        done
-    ) &
-fi
-
 wait "\$WINE_PID"
 LAUNCHEOF
     chmod +x "$LAUNCH_SCRIPT"
 
     cat > "$LAUNCHER_STUDIO" << LAUNCHEOF
 #!/usr/bin/env bash
-ulimit -n 524288 2>/dev/null || true
-export LD_LIBRARY_PATH="$_ft_ld\${LD_LIBRARY_PATH:-}"
-export PATH="$WINE_DIR/bin:\$PATH"
-export WINESERVER="$WINESERVER_BIN"
-export WINEPREFIX="$WINEPREFIX"
-export WINEDEBUG=-all
-export WINEESYNC=1
-export WINEFSYNC=1
-export STAGING_SHARED_MEMORY=1
-export STAGING_WRITECOPY=1
-export WINE_NO_WRITE_CONSOLE=1
-export WINEDLLPATH="$LAUNCHER_DIR:\${WINEDLLPATH:-}"
-export DXVK_ASYNC=1
-export DXVK_STATE_CACHE=1
-export DXVK_CONFIG_FILE="$WINEPREFIX/dxvk.conf"
-export DXVK_STATE_CACHE_PATH="$WINEPREFIX"
-export mesa_glthread=true
-export __GL_SHADER_DISK_CACHE=1
-export __GL_SHADER_DISK_CACHE_PATH="$WINEPREFIX"
-export RADV_PERFTEST=gpl
-if [[ -n "\${CPAK_CONTAINER_ID:-}" ]]; then
-    export LIBGL_ALWAYS_SOFTWARE="\${LIBGL_ALWAYS_SOFTWARE:-1}"
-    export MESA_LOADER_DRIVER_OVERRIDE="\${MESA_LOADER_DRIVER_OVERRIDE:-llvmpipe}"
-    export GALLIUM_DRIVER="\${GALLIUM_DRIVER:-llvmpipe}"
-fi
-export WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS="--no-sandbox --disable-gpu --disable-gpu-compositing --disable-gpu-vsync --in-process-gpu --disable-renderer-accessibility --disable-extensions --disable-component-extensions-with-background-pages --disk-cache-size=33554432 --disable-features=msEdgeSidebar"
-WEBVIEW2_FIXED_DIR="$WEBVIEW2_FIXED_DIR"
-if [[ -d "\$WEBVIEW2_FIXED_DIR" ]] && command -v winepath >/dev/null 2>&1; then
-    export WEBVIEW2_BROWSER_EXECUTABLE_FOLDER="\$(WINEPREFIX="$WINEPREFIX" winepath --windows "\$WEBVIEW2_FIXED_DIR" 2>/dev/null || true)"
-fi
+$_env
 exec wine "$STUDIO_EXE"
 LAUNCHEOF
     chmod +x "$LAUNCHER_STUDIO"
 }
 
+# ponytail: systemd-only; non-systemd systems skip pre-warm instead of a second autostart backend
 _write_prewarm_service() {
-    if _systemd_user_available; then
-        mkdir -p "$HOME/.config/systemd/user"
-        cat > "$HOME/.config/systemd/user/csp-wineserver.service" << EOF
+    mkdir -p "$HOME/.config/systemd/user"
+    cat > "$HOME/.config/systemd/user/csp-wineserver.service" << EOF
 [Unit]
 Description=Wine server pre-warm for CSP
 After=default.target
@@ -945,7 +713,6 @@ Environment=WINEPREFIX=$WINEPREFIX
 Environment=WINESERVER=$WINESERVER_BIN
 Environment=WINEDEBUG=-all
 ExecStartPre=-$WINESERVER_BIN -k
-ExecStartPre=-/usr/bin/bash -c 'for d in "$WINEPREFIX/drive_c/users/$(whoami)/Documents/CELSYS" "$WINEPREFIX/drive_c/users/$(whoami)/AppData/Roaming/CELSYS" "$WINEPREFIX/drive_c/users/$(whoami)/AppData/Local/CELSYS"; do [ -d "\$d" ] && find "\$d" -type f \( -name "*.sqlite" -o -name "*.db" \) -exec cat {} + > /dev/null 2>&1; done'
 ExecStart=$WINESERVER_BIN -f -p
 Restart=always
 RestartSec=5s
@@ -953,28 +720,6 @@ RestartSec=5s
 [Install]
 WantedBy=default.target
 EOF
-    else
-        local _prewarm_script="$LAUNCHER_DIR/csp-wineserver.sh"
-        mkdir -p "$HOME/.config/autostart" "$LAUNCHER_DIR"
-        cat > "$_prewarm_script" << EOF
-#!/usr/bin/env bash
-export PATH="$WINE_DIR/bin:\${PATH:-}"
-export WINEPREFIX="$WINEPREFIX"
-export WINESERVER="$WINESERVER_BIN"
-export WINEDEBUG=-all
-ulimit -n 524288 2>/dev/null || true
-exec "$WINESERVER_BIN" -f -p
-EOF
-        chmod +x "$_prewarm_script"
-        cat > "$HOME/.config/autostart/csp-wineserver.desktop" << EOF
-[Desktop Entry]
-Type=Application
-Name=CSPenguin Wine server
-Exec=$_prewarm_script
-Terminal=false
-X-GNOME-Autostart-enabled=true
-EOF
-    fi
 }
 
 _systemd_user_available() {
@@ -982,20 +727,13 @@ _systemd_user_available() {
 }
 
 _prewarm_enabled() {
-    if _systemd_user_available; then
-        systemctl --user is-enabled csp-wineserver.service >/dev/null 2>&1
-    else
-        [[ -f "$HOME/.config/autostart/csp-wineserver.desktop" ]]
-    fi
+    _systemd_user_available && systemctl --user is-enabled csp-wineserver.service >/dev/null 2>&1
 }
 
 _enable_prewarm() {
+    _systemd_user_available || return 1
     _write_prewarm_service
-    if _systemd_user_available; then
-        systemctl --user daemon-reload 2>/dev/null && systemctl --user enable --now csp-wineserver.service 2>/dev/null
-    else
-        "$LAUNCHER_DIR/csp-wineserver.sh" >/dev/null 2>&1 &
-    fi
+    systemctl --user daemon-reload 2>/dev/null && systemctl --user enable --now csp-wineserver.service 2>/dev/null
 }
 
 _install_patches() {
@@ -1066,7 +804,7 @@ REGEOF
 if [[ $UPDATE_ONLY -eq 0 ]] && [[ $UPDATE_WINE -eq 0 ]] && [[ -f "$LAUNCH_SCRIPT" ]]; then
     _found_wine=$(_detect_installed_wine || echo "unknown")
     echo ""
-    echo -e "  ${YELLOW}${BOLD}existing CSPenguin install found${RESET} ${DIM}(Wine $_found_wine, $LAUNCHER_DIR)${RESET}"
+    echo "  existing CSPenguin install found (Wine $_found_wine, $LAUNCHER_DIR)"
     echo ""
     echo "    1) update       - regenerate launch scripts/config only; keeps your CSP install and Wine version as-is (fast)"
     echo "    2) update wine  - install or repair the supported bundled Wine runtime"
@@ -1090,7 +828,7 @@ if [[ $UPDATE_ONLY -eq 1 || $UPDATE_WINE -eq 1 ]] && [[ ! -f "$LAUNCH_SCRIPT" ]]
     _flag_name="--update"
     [[ $UPDATE_WINE -eq 1 ]] && _flag_name="--update-wine"
     echo ""
-    echo -e "  ${YELLOW}${BOLD}no existing CSPenguin install found${RESET} ${DIM}($LAUNCHER_DIR)${RESET}"
+    echo "  no existing CSPenguin install found ($LAUNCHER_DIR)"
     echo "  $_flag_name needs an existing install to update."
     echo ""
     echo "    1) install now - run a full fresh install instead"
@@ -1114,7 +852,7 @@ if [[ $UPDATE_WINE -eq 1 ]]; then
         die "Wine is baked into the cpak image; rebuild the image to change Wine versions"
     fi
     echo ""
-    echo -e "  ${TEAL}${BOLD}[*] Wine update mode${RESET}"
+    echo "  [*] Wine update mode"
     echo ""
 
     # detect currently installed Wine version
@@ -1123,18 +861,9 @@ if [[ $UPDATE_WINE -eq 1 ]]; then
     info "currently installed:     Wine $_current_wine"
     info "this installer supports: Wine $WINE_VERSION"
 
-    # informational only -- let the user know if upstream has moved past
-    # what this installer currently supports
-    info "checking upstream for newer Wine releases..."
-    _upstream_latest=$(_latest_kron4ek_wine || true)
-    if [[ -n "$_upstream_latest" ]] && [[ "$_upstream_latest" != "$WINE_VERSION" ]]; then
-        warn "Wine $_upstream_latest is available upstream, but this installer's patches are only tested against Wine $WINE_VERSION"
-        info "check https://github.com/SrDicov/CSPenguin-Installer-cpak for an updated installer script"
-    fi
-
     if [[ "$_current_wine" == "$WINE_VERSION" ]]; then
         echo ""
-        echo -e "  ${YELLOW}${BOLD}already at supported Wine $WINE_VERSION${RESET} ${DIM}-- nothing to update${RESET}"
+        echo "  already at supported Wine $WINE_VERSION -- nothing to update"
         echo ""
         echo "    1) update    - regenerate launch scripts/config anyway"
         echo "    2) reinstall - run the full installer again"
@@ -1150,10 +879,10 @@ if [[ $UPDATE_WINE -eq 1 ]]; then
             *) info "cancelled"; exit 0 ;;
         esac
     else
-        if [[ "$(_wine_version_cmp "$WINE_VERSION" "$_current_wine")" == "-1" ]]; then
+        if [[ "$_current_wine" != "$WINE_VERSION" && "$(printf '%s\n%s\n' "$WINE_VERSION" "$_current_wine" | sort -V | tail -1)" == "$_current_wine" ]]; then
             echo ""
-            echo -e "  ${YELLOW}${BOLD}current wine version: $_current_wine is newer than the recommended wine version: $WINE_VERSION${RESET}"
-            echo -e "  ${DIM}continuing will downgrade to $WINE_VERSION to ensure compatibility.${RESET}"
+            echo "  current wine version: $_current_wine is newer than the recommended wine version: $WINE_VERSION"
+            echo "  continuing will downgrade to $WINE_VERSION to ensure compatibility."
             echo ""
             _confirm=""
             read -t 10 -rp "  continue with downgrade? [y/N, cancels in 10s]: " _confirm </dev/tty || true
@@ -1176,13 +905,9 @@ if [[ $UPDATE_WINE -eq 1 ]]; then
         # Keep an existing opt-in pre-warm service pointed at the new runtime.
         if _prewarm_enabled; then
             _write_prewarm_service
-            if _systemd_user_available; then
-                systemctl --user daemon-reload 2>/dev/null || warn "could not reload wineserver service"
-                systemctl --user restart csp-wineserver.service 2>/dev/null \
-                    || warn "could not restart wineserver service"
-            else
-                info "wineserver autostart updated"
-            fi
+            systemctl --user daemon-reload 2>/dev/null || warn "could not reload wineserver service"
+            systemctl --user restart csp-wineserver.service 2>/dev/null \
+                || warn "could not restart wineserver service"
         fi
 
         # clean up old Wine version
@@ -1198,8 +923,8 @@ if [[ $UPDATE_WINE -eq 1 ]]; then
         # dcomp (login/store panels) – always needed
         DCOMP_DLL="$SCRIPT_DIR/patches/dcomp/dcomp.dll"
         PTHREAD_DLL="$SCRIPT_DIR/patches/dcomp/libwinpthread-1.dll"
-        ensure_asset "patches/dcomp/dcomp.dll"          "$DCOMP_DLL"
-        ensure_asset "patches/dcomp/libwinpthread-1.dll" "$PTHREAD_DLL"
+        fetch_asset "patches/dcomp/dcomp.dll"          "$DCOMP_DLL"
+        fetch_asset "patches/dcomp/libwinpthread-1.dll" "$PTHREAD_DLL"
         [[ -f "$DCOMP_DLL" ]] || die "dcomp.dll not found"
         cp "$DCOMP_DLL"    "$LAUNCHER_DIR/dcomp.dll"
         mkdir -p "$SYS32"
@@ -1250,8 +975,8 @@ if [[ $UPDATE_ONLY -eq 1 ]]; then
     fi
 
     echo ""
-    echo -e "  ${TEAL}${BOLD}CSPenguin update mode${RESET}"
-    echo -e "  ${DIM}regenerating launch scripts, config, and service${RESET}"
+    echo "  CSPenguin update mode"
+    echo "  regenerating launch scripts, config, and service"
     echo ""
 
     # registry tweaks
@@ -1279,22 +1004,22 @@ if [[ $UPDATE_ONLY -eq 0 ]]; then
 
 echo ""
 echo ""
-echo -e "          .--."
-echo -e "         |o_o |  ${TEAL}${BOLD}CSPenguin-Installer!${RESET}"
-echo -e "         |:_/ |  ${DIM}Never stop drawing.${RESET}"
-echo -e "        //   \\ \\"
+echo "          .--."
+echo "         |o_o |  CSPenguin-Installer!"
+echo "         |:_/ |  Never stop drawing."
+echo '        //   \ \'
 if [[ $CPAK_MODE -eq 1 ]]; then
-    echo -e "       (|     | )  ${DIM}running inside the cpak environment${RESET}"
-    echo -e "      /'\_   _/\`\\  ${DIM}without changing host packages${RESET}"
-    echo -e "      \___)=(___/  ${DIM}or host system limits.${RESET}"
+    echo "       (|     | )  running inside the cpak environment"
+    echo "      /'\_   _/\`\\  without changing host packages"
+    echo "      \___)=(___/  or host system limits."
 else
-    echo -e "       (|     | )  ${DIM}this script will ask for your password${RESET}"
-    echo -e "      /'\_   _/\`\\  ${DIM}once or twice to install packages${RESET}"
-    echo -e "      \___)=(___/  ${DIM}and set system limits.${RESET}"
+    echo "       (|     | )  this script will ask for your password"
+    echo "      /'\_   _/\`\\  once or twice to install packages"
+    echo "      \___)=(___/  and set system limits."
 fi
 echo ""
 echo ""
-echo -e "  ${BOLD}Which version of Clip Studio Paint?${RESET}"
+echo "  Which version of Clip Studio Paint?"
 echo "    1) 5.1.2 (latest)"
 echo "    2) 5.0.4 (perpetual)"
 echo "    3) 4.1.0"
@@ -1363,9 +1088,6 @@ else
     command -v wget >/dev/null 2>&1 || _missing+=(wget)
     command -v curl >/dev/null 2>&1 || _missing+=(curl)
     command -v unzstd >/dev/null 2>&1 || _missing+=(zstd)
-    command -v wmctrl >/dev/null 2>&1 || _missing+=(wmctrl)
-    command -v xprop >/dev/null 2>&1 || _missing+=(xprop)
-    command -v file >/dev/null 2>&1 || _missing+=(file)
     command -v cabextract >/dev/null 2>&1 || _missing+=(cabextract)
     _gst_ok || _missing+=("gstreamer plugins")
     if [[ "$(_detect_pm)" == "xbps" ]]; then
@@ -1381,18 +1103,12 @@ else
         if [[ "$_pm" == "unknown" ]]; then
             die "unsupported distro, install wget, curl, and gstreamer plugins manually"
         fi
-        printf "  ${TEAL}│${RESET} " || true
-        read -rp "  install automatically? [Y/n]: " _ans </dev/tty
+                read -rp "  install automatically? [Y/n]: " _ans </dev/tty
         if [[ "${_ans:-y}" =~ ^[Yy]$ ]]; then
             if [[ $DRY_RUN -eq 1 ]]; then
                 ok "dependencies (dry run)"
             else
-                case "$_pm" in
-                    xbps)   _install_deps_xbps ;;
-                    pacman) _install_deps_pacman ;;
-                    dnf)    _install_deps_dnf ;;
-                    apt)    _install_deps_apt ;;
-                esac
+                _install_deps
             fi
         else
             die "install dependencies manually, then re-run"
@@ -1460,30 +1176,10 @@ fi
 _queue_dl "winetricks" "$WINETRICKS_URL" "$WINETRICKS_BIN"
 
 if [[ ${#_dl_pids[@]} -gt 0 ]]; then
-    _frames=('|' '/' '-' '\')
-    _i=0
-    _remaining=${#_dl_pids[@]}
-    while [[ $_remaining -gt 0 ]]; do
-        for _j in "${!_dl_pids[@]}"; do
-            if [[ -n "${_dl_pids[$_j]:-}" ]] && ! kill -0 "${_dl_pids[$_j]}" 2>/dev/null; then
-                wait "${_dl_pids[$_j]}" || die "download failed: ${_dl_names[$_j]}"
-                mv "${_dl_tmps[$_j]}" "${_dl_dests[$_j]}"
-                printf "\r%80s\r" ""
-                ok "${_dl_names[$_j]}"
-                unset '_dl_pids[$_j]'
-                _remaining=$((_remaining - 1))
-            fi
-        done
-        if [[ $_remaining -gt 0 ]]; then
-            _pending=""
-            for _j in "${!_dl_names[@]}"; do
-                [[ -n "${_dl_pids[$_j]:-}" ]] && _pending+="${_dl_names[$_j]}, "
-            done
-            _pending="${_pending%, }"
-            printf "\r  ${TEAL}│${RESET} ${TEAL}%s${RESET} ${DIM}%s${RESET}  " "${_frames[$((_i % 4))]}" "$_pending"
-            sleep 0.2
-            _i=$((_i + 1))
-        fi
+    for _j in "${!_dl_pids[@]}"; do
+        wait "${_dl_pids[$_j]}" || die "download failed: ${_dl_names[$_j]}"
+        mv "${_dl_tmps[$_j]}" "${_dl_dests[$_j]}"
+        ok "${_dl_names[$_j]}"
     done
 fi
 
@@ -1534,9 +1230,12 @@ if [[ $DRY_RUN -eq 0 ]]; then
 fi
 if [[ $DRY_RUN -eq 0 ]]; then
     export WINEPREFIX WINEARCH WINESERVER="$WINESERVER_BIN"
+    # A prefix booted against a half-dead wineserver fails with
+    # "could not load kernel32.dll, status c0000135", so ask any
+    # stale server to stop and wait until it is really gone.
     "$WINESERVER_BIN" -k 2>/dev/null || true
     wineserver -k 2>/dev/null || true
-    sleep 0.5
+    timeout 15 "$WINESERVER_BIN" -w 2>/dev/null || true
 fi
 wait_for "initialising prefix" env "WINEDEBUG=$WINEBOOT_DEBUG" wineboot --init
 
@@ -1628,8 +1327,8 @@ else
 
     DCOMP_DLL="$SCRIPT_DIR/patches/dcomp/dcomp.dll"
     PTHREAD_DLL="$SCRIPT_DIR/patches/dcomp/libwinpthread-1.dll"
-    ensure_asset "patches/dcomp/dcomp.dll"          "$DCOMP_DLL"
-    ensure_asset "patches/dcomp/libwinpthread-1.dll" "$PTHREAD_DLL"
+    fetch_asset "patches/dcomp/dcomp.dll"          "$DCOMP_DLL"
+    fetch_asset "patches/dcomp/libwinpthread-1.dll" "$PTHREAD_DLL"
     [[ -f "$DCOMP_DLL" ]] || die "dcomp.dll not found"
 
     cp "$DCOMP_DLL"    "$LAUNCHER_DIR/dcomp.dll"
@@ -1671,11 +1370,10 @@ else
     sleep 1
 
     gap
-    msg "${BOLD}press enter to launch the CSP installer.${RESET}"
-    msg "${DIM}complete the installer as normal.${RESET}"
+    msg "press enter to launch the CSP installer."
+    msg "complete the installer as normal."
     gap
-    printf "  ${TEAL}│${RESET}   " || true
-    read -rp "press enter to continue..." </dev/tty
+        read -rp "press enter to continue..." </dev/tty
     info "CSP installer running, come back when done..."
     run wine reg add "HKCU\\Software\\Wine\\AppDefaults\\$CSP_EXE_NAME" /v Version /t REG_SZ /d "win81" /f || warn "failed to set installer compatibility"
     env WINEDEBUG=-all \
@@ -1709,9 +1407,6 @@ else
 if [[ $DRY_RUN -eq 1 ]]; then
     ok "launch scripts (dry run)"
     ok "desktop entries (dry run)"
-    if [[ "${XDG_CURRENT_DESKTOP:-}" == *"KDE"* ]]; then
-        ok "KDE window rules (dry run)"
-    fi
     ok ".clip thumbnails + MIME type (dry run)"
 else
 
@@ -1724,14 +1419,15 @@ ICON_STUDIO="$ICON_THEME_DIR/clipstudio.png"
 ICON_URL="https://upload.wikimedia.org/wikipedia/commons/1/14/Clipstudiopaint_app_logo.png"
 mkdir -p "$ICON_THEME_DIR"
 
+# ponytail: plain download, no file(1) PNG validation; a corrupt icon is cosmetic
 _fetch_icon() {
     local dest="$1"
-    if [[ -f "$dest" ]] && file "$dest" | grep -q 'PNG image'; then
+    if [[ -s "$dest" ]]; then
         ok "icon: $(basename "$dest") (cached)"
         return
     fi
     local tmp="${dest}.part"
-    if wget -q --timeout=30 --tries=3 -O "$tmp" "$ICON_URL" && file "$tmp" | grep -q 'PNG image'; then
+    if wget -q --timeout=30 --tries=3 -O "$tmp" "$ICON_URL"; then
         mv "$tmp" "$dest"
         ok "icon: $(basename "$dest")"
     else
@@ -1776,108 +1472,12 @@ EOF
 chmod +x "$DESKTOP_FILE" "$DESKTOP_STUDIO"
 ok "desktop entries"
 
-if [[ "${XDG_CURRENT_DESKTOP:-}" == *"KDE"* ]]; then
-    cp "$DESKTOP_FILE"   "$HOME/Desktop/clipstudiopaint.desktop" 2>/dev/null || true
-    cp "$DESKTOP_STUDIO" "$HOME/Desktop/clipstudio.desktop"      2>/dev/null || true
-
-    _kwinrc="$HOME/.config/kwinrulesrc"
-    _kwc="" _krc=""
-    if command -v kwriteconfig6 >/dev/null 2>&1; then
-        _kwc=kwriteconfig6; _krc=kreadconfig6
-    elif command -v kwriteconfig5 >/dev/null 2>&1; then
-        _kwc=kwriteconfig5; _krc=kreadconfig5
-    fi
-
-    if [[ -n "$_kwc" ]]; then
-        _write_kwin_subwindow_rule() {
-            local uuid="$1"
-            $_kwc --file kwinrulesrc --group "$uuid" --key Description "CSPenguin: CSP subwindows on top"
-            $_kwc --file kwinrulesrc --group "$uuid" --key below false
-            $_kwc --file kwinrulesrc --group "$uuid" --key belowrule 3
-            $_kwc --file kwinrulesrc --group "$uuid" --key above true
-            $_kwc --file kwinrulesrc --group "$uuid" --key aboverule 3
-            $_kwc --file kwinrulesrc --group "$uuid" --key fsplevel 3
-            $_kwc --file kwinrulesrc --group "$uuid" --key fsplevelrule 2
-            $_kwc --file kwinrulesrc --group "$uuid" --key hastransientparent true
-            $_kwc --file kwinrulesrc --group "$uuid" --key hastransientparentmatch 1
-            $_kwc --file kwinrulesrc --group "$uuid" --key skiptaskbar true
-            $_kwc --file kwinrulesrc --group "$uuid" --key skiptaskbarrule 3
-            $_kwc --file kwinrulesrc --group "$uuid" --key wmclass "clipstudiopaint.exe clipstudiopaint.exe"
-            $_kwc --file kwinrulesrc --group "$uuid" --key wmclasscomplete true
-            $_kwc --file kwinrulesrc --group "$uuid" --key wmclassmatch 1
-        }
-
-        _register_kwin_rule() {
-            local uuid="$1" rules count
-            rules=$($_krc --file kwinrulesrc --group General --key rules 2>/dev/null || true)
-            count=$($_krc --file kwinrulesrc --group General --key count 2>/dev/null || echo 0)
-            if [[ "$rules" != *"$uuid"* ]]; then
-                local new_rules="${rules:+$rules,}$uuid"
-                $_kwc --file kwinrulesrc --group General --key count "$((count + 1))"
-                $_kwc --file kwinrulesrc --group General --key rules "$new_rules"
-            fi
-        }
-
-        _reload_kwin() {
-            qdbus org.kde.KWin /KWin reconfigure 2>/dev/null || \
-                dbus-send --type=method_call --dest=org.kde.KWin /KWin org.kde.KWin.reconfigure 2>/dev/null || true
-        }
-
-        _csp_uuid=""
-        _is_old_rule=0
-        if grep -q "CSPenguin:" "$_kwinrc" 2>/dev/null; then
-            _csp_uuid=$(awk -F'[][]' '/^\[/{grp=$2} /CSPenguin:/{print grp; exit}' "$_kwinrc" 2>/dev/null || true)
-            if [[ -n "$_csp_uuid" ]]; then
-                _below_val=$($_krc --file kwinrulesrc --group "$_csp_uuid" --key below 2>/dev/null || true)
-                [[ "$_below_val" == "true" ]] && _is_old_rule=1
-            fi
-        fi
-
-        if [[ -n "$_csp_uuid" ]]; then
-            if [[ $_is_old_rule -eq 1 ]]; then
-                warn "migrating old CSPenguin window rule..."
-                _write_kwin_subwindow_rule "$_csp_uuid"
-                _reload_kwin
-                ok "KDE window rules (migrated)"
-            else
-                _wmclass=$($_krc --file kwinrulesrc --group "$_csp_uuid" --key wmclass 2>/dev/null || true)
-                _wmclasscomplete=$($_krc --file kwinrulesrc --group "$_csp_uuid" --key wmclasscomplete 2>/dev/null || true)
-                _above_val=$($_krc --file kwinrulesrc --group "$_csp_uuid" --key above 2>/dev/null || true)
-
-                if [[ "$_wmclass" != "clipstudiopaint.exe clipstudiopaint.exe" ]] || \
-                   [[ "$_wmclasscomplete" != "true" ]] || \
-                   [[ "$_above_val" != "true" ]]; then
-                    _write_kwin_subwindow_rule "$_csp_uuid"
-                    _reload_kwin
-                    ok "KDE window rules (updated)"
-                else
-                    ok "KDE window rules (already set)"
-                fi
-            fi
-        else
-            _uuid_above="cspenguin-$(uuidgen 2>/dev/null || echo above-rule)"
-            _write_kwin_subwindow_rule "$_uuid_above"
-            _register_kwin_rule "$_uuid_above"
-            _reload_kwin
-            ok "KDE window rules"
-        fi
-    else
-        warn "kwriteconfig not found, set window rules manually"
-    fi
-    # rebuild the KDE menu database so updated .desktop entries + icons show up immediately
-    if command -v kbuildsycoca6 >/dev/null 2>&1; then
-        kbuildsycoca6 2>/dev/null || true
-    elif command -v kbuildsycoca5 >/dev/null 2>&1; then
-        kbuildsycoca5 2>/dev/null || true
-    fi
-fi
-
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 
 THUMBNAILER_SRC="$SCRIPT_DIR/patches/thumbnailer/clip-thumbnailer"
 THUMBNAILER_BIN="$HOME/.local/bin/clip-thumbnailer"
-ensure_asset "patches/thumbnailer/clip-thumbnailer" "$THUMBNAILER_SRC"
+fetch_asset "patches/thumbnailer/clip-thumbnailer" "$THUMBNAILER_SRC"
 
 mkdir -p "$HOME/.local/bin"
 if [[ -x "$THUMBNAILER_BIN" ]]; then
@@ -1935,26 +1535,22 @@ gap
 if [[ $CPAK_MODE -eq 1 ]]; then
     _prewarm="n"
     ok "wineserver managed by cpak"
+elif ! _systemd_user_available; then
+    _prewarm="n"
+    ok "wineserver pre-warm skipped (no systemd user session)"
 elif [[ $UPDATE_ONLY -eq 1 ]] && _prewarm_enabled; then
     _prewarm="y"
     info "updating existing wineserver service"
 else
-    printf "  ${TEAL}│${RESET}   " || true
     read -rp "enable wineserver pre-warm? [Y/n] " _prewarm </dev/tty
 fi
 if [[ "${_prewarm,,}" != "n" ]]; then
     if [[ $DRY_RUN -eq 1 ]]; then
         ok "wineserver service (dry run)"
+    elif _enable_prewarm; then
+        ok "wineserver service enabled"
     else
-        if _enable_prewarm; then
-            if _systemd_user_available; then
-                ok "wineserver service enabled"
-            else
-                ok "wineserver autostart enabled"
-            fi
-        else
-            warn "could not enable wineserver pre-warm"
-        fi
+        warn "could not enable wineserver pre-warm"
     fi
 else
     ok "wineserver pre-warm skipped"
@@ -1964,30 +1560,30 @@ _install_ok=1
 
 _divider=$(printf '━%.0s' $(seq 1 46))
 echo ""
-echo -e "  ${TEAL}${_divider}${RESET}"
+echo "  ${_divider}"
 echo ""
-echo -e "  ${AMBER}+${RESET} ${AMBER}${BOLD}all done!${RESET}"
+echo "  + all done!"
 echo ""
-echo -e "  find ${BOLD}Clip Studio Paint${RESET} in your"
-echo -e "  app menu, or launch via terminal:"
-echo -e "  ${DIM}$LAUNCH_SCRIPT${RESET}"
+echo "  find Clip Studio Paint in your"
+echo "  app menu, or launch via terminal:"
+echo "  $LAUNCH_SCRIPT"
 echo ""
 if [[ $_ESYNC_RESTART -eq 1 ]]; then
-echo -e "  ${AMBER}note${RESET}"
-echo -e "    log out and back in for esync to take effect"
+echo "  note"
+echo "    log out and back in for esync to take effect"
 echo ""
 fi
-echo -e "  ${AMBER}tips${RESET}"
-echo -e "    ${DIM}pen pressure${RESET}  Preferences > Tablet > mouse mode"
-echo -e "    ${DIM}hidpi${RESET}         winecfg > Graphics > DPI"
-echo -e "    ${DIM}thumbnails${RESET}    enable in file manager preview settings"
-echo -e "                   (Dolphin: Configure Dolphin > Interface > Previews"
-echo -e "                    > tick \"Clip Studio Paint File\", then restart Dolphin)"
+echo "  tips"
+echo "    pen pressure  Preferences > Tablet > mouse mode"
+echo "    hidpi         winecfg > Graphics > DPI"
+echo "    thumbnails    enable in file manager preview settings"
+echo "                   (Dolphin: Configure Dolphin > Interface > Previews"
+echo "                    > tick \"Clip Studio Paint File\", then restart Dolphin)"
 echo ""
-echo -e "  ${DIM}something not working? open an issue at${RESET}"
-  echo -e "  ${DIM}https://github.com/SrDicov/CSPenguin-Installer-cpak${RESET}"
+echo "  something not working? open an issue at"
+  echo "  https://github.com/SrDicov/CSPenguin-Installer-cpak"
 echo ""
-echo -e "  ${DIM}installer by https://eninabox.art${RESET}"
+echo "  installer by https://eninabox.art"
 echo ""
-echo -e "  ${TEAL}${_divider}${RESET}"
+echo "  ${_divider}"
 echo ""
